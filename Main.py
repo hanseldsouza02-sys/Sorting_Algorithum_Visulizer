@@ -2,6 +2,8 @@ import pygame
 import random
 import math
 import time
+import tracemalloc
+import psutil
 pygame.init()
 
 class DrawInformation:
@@ -9,6 +11,7 @@ class DrawInformation:
 	WHITE = 255,255,255
 	GREEN = 0,255,0
 	RED = 255,0,0
+	BLUE = 0,0,255
 	BACKGROUD_COLOR = WHITE
 
 	GRADIENTS = [# diifrenet gradiant colour of gray
@@ -49,7 +52,7 @@ class DrawInformation:
 		self.start_x = self.SIDE_PAD//2
 
 
-def draw(draw_info,sorting_algo_name,ascending,elapsed_time=0):
+def draw(draw_info,sorting_algo_name,ascending,elapsed_time=0,peak_memory=0,cpu_percent=0):
 	draw_info.window.fill(draw_info.BACKGROUD_COLOR)
 
 	title = draw_info.FONT.render(f"{sorting_algo_name} - {'Ascending'if ascending else 'Descending'}",1,draw_info.RED)
@@ -60,14 +63,26 @@ def draw(draw_info,sorting_algo_name,ascending,elapsed_time=0):
 	draw_info.window.blit(controles,((draw_info.weidth/2 - controles.get_width()/2),35)) # mid of screen
 
 
-	sorting = draw_info.FONT.render("I - Insertion Sort | B - Bubble sort",1,draw_info.BLACK)
+	sorting = draw_info.FONT.render("I - Insertion Sort | B - Bubble Sort | M - Merge Sort | Q - Quick Sort | H - Heap Sort",1,draw_info.BLACK)
 	draw_info.window.blit(sorting,(draw_info.weidth/2 - sorting.get_width()/2,65))
 
 	time_text = draw_info.FONT.render(
     f"Time: {elapsed_time:.4f} sec",
     True,
-    draw_info.BLACK)
+    draw_info.BLUE)
 	draw_info.window.blit(time_text, (10, 10))
+
+	memory_text = draw_info.FONT.render(
+    f"Peak Mem: {peak_memory/1024:.1f} KB",
+    True,
+    draw_info.BLUE)
+	draw_info.window.blit(memory_text, (10, 95))
+
+	cpu_text = draw_info.FONT.render(
+    f"CPU: {cpu_percent:.1f} %",
+    True,
+    draw_info.BLUE)
+	draw_info.window.blit(cpu_text, (10, 120))
 
 	draw_list(draw_info)
 	pygame.display.update()
@@ -151,6 +166,126 @@ def insertion_sort(draw_info,ascending=True):
 	return lst
 
 
+def merge_sort(draw_info,ascending=True):
+	lst = draw_info.lst
+
+	yield from merge_sort_helper(draw_info,lst,0,len(lst)-1,ascending)
+
+	return lst
+
+
+def merge_sort_helper(draw_info,lst,left,right,ascending):
+	if left >= right:
+		return
+
+	mid = (left + right)//2
+
+	yield from merge_sort_helper(draw_info,lst,left,mid,ascending)
+	yield from merge_sort_helper(draw_info,lst,mid+1,right,ascending)
+	yield from merge(draw_info,lst,left,mid,right,ascending)
+
+
+def merge(draw_info,lst,left,mid,right,ascending):
+	left_half = lst[left:mid+1]
+	right_half = lst[mid+1:right+1]
+
+	i = j = 0
+	k = left
+
+	while i < len(left_half) and j < len(right_half):
+		if (left_half[i] <= right_half[j] and ascending) or (left_half[i] >= right_half[j] and not ascending):
+			lst[k] = left_half[i]
+			i += 1
+		else:
+			lst[k] = right_half[j]
+			j += 1
+
+		draw_list(draw_info,{k:draw_info.GREEN},True)
+		yield True
+		k += 1
+
+	while i < len(left_half):
+		lst[k] = left_half[i]
+		i += 1
+		draw_list(draw_info,{k:draw_info.GREEN},True)
+		yield True
+		k += 1
+
+	while j < len(right_half):
+		lst[k] = right_half[j]
+		j += 1
+		draw_list(draw_info,{k:draw_info.GREEN},True)
+		yield True
+		k += 1
+
+
+def quick_sort(draw_info,ascending=True):
+	lst = draw_info.lst
+
+	yield from quick_sort_helper(draw_info,lst,0,len(lst)-1,ascending)
+
+	return lst
+
+
+def quick_sort_helper(draw_info,lst,low,high,ascending):
+	if low >= high:
+		return
+
+	pivot = lst[high]
+	i = low - 1
+
+	for j in range(low,high):
+		if (lst[j] <= pivot and ascending) or (lst[j] >= pivot and not ascending):
+			i += 1
+			lst[i],lst[j] = lst[j],lst[i]
+			draw_list(draw_info,{i:draw_info.GREEN,j:draw_info.RED,high:draw_info.RED},True)
+			yield True
+
+	lst[i+1],lst[high] = lst[high],lst[i+1]
+	draw_list(draw_info,{i+1:draw_info.GREEN,high:draw_info.RED},True)
+	yield True
+
+	yield from quick_sort_helper(draw_info,lst,low,i,ascending)
+	yield from quick_sort_helper(draw_info,lst,i+2,high,ascending)
+
+
+def heap_sort(draw_info,ascending=True):
+	lst = draw_info.lst
+	n = len(lst)
+
+	# build a max heap for ascending, min heap for descending
+	for i in range(n//2 - 1,-1,-1):
+		yield from sift_down(draw_info,lst,i,n,ascending)
+
+	for end in range(n-1,0,-1):
+		lst[0],lst[end] = lst[end],lst[0]
+		draw_list(draw_info,{0:draw_info.GREEN,end:draw_info.RED},True)
+		yield True
+		yield from sift_down(draw_info,lst,0,end,ascending)
+
+	return lst
+
+
+def sift_down(draw_info,lst,root,size,ascending):
+	while True:
+		largest = root
+		left = 2*root + 1
+		right = 2*root + 2
+
+		if left < size and ((lst[left] > lst[largest] and ascending) or (lst[left] < lst[largest] and not ascending)):
+			largest = left
+
+		if right < size and ((lst[right] > lst[largest] and ascending) or (lst[right] < lst[largest] and not ascending)):
+			largest = right
+
+		if largest == root:
+			break
+
+		lst[root],lst[largest] = lst[largest],lst[root]
+		draw_list(draw_info,{root:draw_info.GREEN,largest:draw_info.RED},True)
+		yield True
+		root = largest
+
 
 def main():
 
@@ -174,19 +309,35 @@ def main():
 	start_time = None
 	elapsed_time = 0
 
+	#memory and cpu part
+	peak_memory = 0
+	cpu_percent = 0
+	process = psutil.Process()
+	process.cpu_percent()  # first call always returns 0, prime it
+	cpu_frame_counter = 0
+
 	while run:
 
 		clock.tick(160)
 
 		if sorting:
 			elapsed_time = time.perf_counter() - start_time
+			peak_memory = tracemalloc.get_traced_memory()[1]
 			try:
 				next(sorting_algorithum_generator)
 			except StopIteration:
 				sorting = False
 				elapsed_time = time.perf_counter() - start_time
-		
-		draw(draw_info, sorting_algo_name, ascending, elapsed_time)
+				peak_memory = tracemalloc.get_traced_memory()[1]
+				tracemalloc.stop()
+
+		# cpu_percent measures since the last call, so sample every ~40 frames
+		cpu_frame_counter += 1
+		if cpu_frame_counter >= 40:
+			cpu_percent = process.cpu_percent()
+			cpu_frame_counter = 0
+
+		draw(draw_info, sorting_algo_name, ascending, elapsed_time, peak_memory, cpu_percent)
 
 		#pygame.display.update()
 		#draw(draw_info)
@@ -202,6 +353,10 @@ def main():
 				lst = generate_strating_list(n,min_value,max_value)
 				draw_info.set_list(lst)
 				sorting = False
+				if tracemalloc.is_tracing():
+					tracemalloc.stop()
+				elapsed_time = 0
+				peak_memory = 0
 			# elif event.key == pygame.K_SPACE and sorting == False:
 			# 	sorting = True
 			# 	sorting_algorithum_generator = sorting_algorithum(draw_info,ascending)
@@ -209,6 +364,10 @@ def main():
 				sorting = True
 				start_time = time.perf_counter()
 				elapsed_time = 0
+				peak_memory = 0
+				if tracemalloc.is_tracing():
+					tracemalloc.stop()
+				tracemalloc.start()
 				sorting_algorithum_generator = sorting_algorithum(draw_info,ascending)
 
 			elif event.key == pygame.K_a and not sorting:
@@ -223,6 +382,18 @@ def main():
 			elif event.key == pygame.K_b and not sorting:
 				sorting_algorithum = bubble_sort
 				sorting_algo_name = "Bubble Sort"
+
+			elif event.key == pygame.K_m and not sorting:
+				sorting_algorithum = merge_sort
+				sorting_algo_name = "Merge Sort"
+
+			elif event.key == pygame.K_q and not sorting:
+				sorting_algorithum = quick_sort
+				sorting_algo_name = "Quick Sort"
+
+			elif event.key == pygame.K_h and not sorting:
+				sorting_algorithum = heap_sort
+				sorting_algo_name = "Heap Sort"
 		
 
 
