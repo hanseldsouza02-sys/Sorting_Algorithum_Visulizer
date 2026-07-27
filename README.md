@@ -1,1 +1,1 @@
-# Sorting_Algorithum_Visulizer
+# Sorting_Algorithm_Visualizer
